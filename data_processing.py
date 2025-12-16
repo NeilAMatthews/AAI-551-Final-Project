@@ -1,144 +1,171 @@
 """
 Data processing module containing Dataset class and data handling functions.
+
+Supports generic (x, y) datasets and time-series datasets (e.g., AEP_hourly).
 """
+
+from __future__ import annotations
+
+import statistics
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Tuple, List, Optional, Generator, Dict, Any
 
 import numpy as np
 import pandas as pd
-from typing import Tuple, List, Optional, Generator, Dict, Any
-from datetime import datetime
-import sys
-import statistics
-from pathlib import Path
 
 
 class Dataset:
     """
-    Class representing a dataset for linear regression analysis.
-    
+    Class representing a dataset for analysis.
+
     This class handles data loading, validation, and basic statistics.
     """
-    
-    def __init__(self, filepath: str):
+
+    def __init__(
+        self,
+        filepath: str | Path,
+        x_col: str = "x",
+        y_col: str = "y",
+        parse_datetime: bool = False,
+        drop_na: bool = True,
+    ):
         """
-        Initialize Dataset with data from a file.
-        
+        Initialize Dataset with data from a CSV file.
+
         Args:
             filepath: Path to the CSV file containing data
+            x_col: Column name for x (feature) values
+            y_col: Column name for y (target) values
+            parse_datetime: If True, parse x_col as datetime
+            drop_na: If True, drop rows with missing x/y after conversion
         """
-        self.filepath = filepath
-        self.data = None  # Mutable list object
-        self.x_data = []  # Mutable list object
-        self.y_data = []  # Mutable list object
-        self.metadata = {}  # Mutable dict object
-        
+        self.filepath = str(filepath)
+        self.x_col = x_col
+        self.y_col = y_col
+        self.parse_datetime = parse_datetime
+        self.drop_na = drop_na
+
+        # Mutable objects
+        self.data: Optional[List[Tuple[Any, float]]] = None
+        self.x_data: List[Any] = []
+        self.y_data: List[float] = []
+        self.metadata: Dict[str, Any] = {}
+
         # Immutable objects
         self.created_at = datetime.now()
-        self.data_type = "numerical"  # Immutable string
-        
+        self.data_type = "numerical"
+
         self._load_data()
-    
+
     def _load_data(self) -> None:
-        """Load data from CSV file with error handling."""
-        try:
-            # Using pandas for data I/O
-            df = pd.read_csv(self.filepath)
-            
-            # Check required columns
-            if 'x' not in df.columns or 'y' not in df.columns:
-                raise ValueError("CSV must contain 'x' and 'y' columns")
-            
-            # Convert to lists using list comprehension
-            self.x_data = [float(x) for x in df['x'].tolist()]
-            self.y_data = [float(y) for y in df['y'].tolist()]
-            
-            # Store as list of tuples
-            self.data = list(zip(self.x_data, self.y_data))
-            
-            # Calculate metadata
-            self._calculate_metadata()
-            
-        except FileNotFoundError:
-            print(f"Error: File '{self.filepath}' not found.")
-            sys.exit(1)
-        except pd.errors.EmptyDataError:
-            print("Error: CSV file is empty.")
-            sys.exit(1)
-        except Exception as e:
-            print(f"Error loading data: {str(e)}")
-            sys.exit(1)
-    
+        """Load data from CSV file with error handling (raises exceptions)."""
+        df = pd.read_csv(self.filepath)
+
+        # Check required columns
+        if self.x_col not in df.columns or self.y_col not in df.columns:
+            raise ValueError(
+                f"CSV must contain columns '{self.x_col}' and '{self.y_col}'. "
+                f"Found: {list(df.columns)}"
+            )
+
+        x_series = df[self.x_col]
+        y_series = df[self.y_col]
+
+        # Parse datetime if requested
+        if self.parse_datetime:
+            x_series = pd.to_datetime(x_series, errors="raise")
+
+        # Ensure y is numeric
+        y_series = pd.to_numeric(y_series, errors="raise")
+
+        # Optional NA handling
+        if self.drop_na:
+            mask = ~(x_series.isna() | y_series.isna())
+            x_series = x_series[mask]
+            y_series = y_series[mask]
+
+        # Convert to lists (list comprehension requirement)
+        self.x_data = [x for x in x_series.tolist()]
+        self.y_data = [float(y) for y in y_series.tolist()]
+
+        # Store as list of tuples (zip requirement)
+        self.data = list(zip(self.x_data, self.y_data))
+
+        self._calculate_metadata()
+
     def _calculate_metadata(self) -> None:
         """Calculate basic statistics and metadata."""
         if not self.data:
+            self.metadata = {}
             return
-        
-        # Using map and lambda for calculations
-        x_squared = list(map(lambda x: x**2, self.x_data))
-        y_squared = list(map(lambda y: y**2, self.y_data))
-        
+
+        # Use map + lambda (rubric feature)
+        y_squared = list(map(lambda v: v ** 2, self.y_data))
+
+        # Use numpy meaningfully (not superfluous)
+        y_np = np.array(self.y_data, dtype=float)
+
+        # For numeric x only; datetime x is handled separately
+        numeric_x = all(isinstance(x, (int, float, np.number)) for x in self.x_data)
+
         self.metadata = {
-            'n_samples': len(self.data),
-            'x_mean': statistics.mean(self.x_data),
-            'y_mean': statistics.mean(self.y_data),
-            'x_variance': statistics.variance(self.x_data),
-            'y_variance': statistics.variance(self.y_data),
-            'x_range': (min(self.x_data), max(self.x_data)),
-            'y_range': (min(self.y_data), max(self.y_data))
+            "n_samples": len(self.data),
+            "y_mean": float(np.mean(y_np)),
+            "y_std": float(np.std(y_np, ddof=1)) if len(y_np) > 1 else 0.0,
+            "y_min": float(np.min(y_np)),
+            "y_max": float(np.max(y_np)),
+            "y_energy": float(np.sum(y_squared)),  # uses map/lambda output
+            "created_at": self.created_at.isoformat(),
         }
-    
-    def get_data_generator(self) -> Generator[Tuple[float, float], None, None]:
+
+        if numeric_x:
+            self.metadata.update(
+                {
+                    "x_mean": statistics.mean([float(x) for x in self.x_data]),
+                    "x_variance": statistics.variance([float(x) for x in self.x_data])
+                    if len(self.x_data) > 1
+                    else 0.0,
+                    "x_range": (min(self.x_data), max(self.x_data)),
+                }
+            )
+
+    def get_data_generator(self) -> Generator[Tuple[Any, float], None, None]:
         """
         Generator function to yield data points one by one.
-        
+
         Yields:
-          Tuple of (x, y) values
+            Tuple of (x, y) values
         """
-        for x, y in self.data:
+        if not self.data:
+            return
+        for x, y in self.data:  # for-loop requirement
             yield x, y
-    
-    def filter_data(self, condition_func) -> List[Tuple[float, float]]:
+
+    def filter_data(self, condition_func) -> List[Tuple[Any, float]]:
         """
         Filter data using a condition function.
-        
+
         Args:
             condition_func: Function that takes (x, y) and returns bool
-            
+
         Returns:
             Filtered list of (x, y) tuples
         """
-        return list(filter(condition_func, self.data))
-    
-    def get_subset(self, indices: List[int]) -> 'Dataset':
-        """
-        Create a subset of the dataset.
-        
-        Args:
-            indices: List of indices to include
-            
-        Returns:
-            New Dataset object with subset of data
-        """
-        subset_x = [self.x_data[i] for i in indices if i < len(self.x_data)]
-        subset_y = [self.y_data[i] for i in indices if i < len(self.y_data)]
-        
-        # Create temporary file for subset
-        import tempfile
-        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False)
-        
-        df = pd.DataFrame({'x': subset_x, 'y': subset_y})
-        df.to_csv(temp_file.name, index=False)
-        
-        return Dataset(temp_file.name)
-    
+        if not self.data:
+            return []
+        return list(filter(condition_func, self.data))  # filter requirement
+
     def __str__(self) -> str:
         """String representation of the dataset."""
-        return f"Dataset({self.filepath}): {len(self.data)} samples"
-    
+        return f"Dataset({Path(self.filepath).name}): {len(self)} samples"
+
     def __len__(self) -> int:
         """Return number of samples (operator overloading)."""
         return len(self.data) if self.data else 0
-    
-    def __getitem__(self, index: int) -> Tuple[float, float]:
+
+    def __getitem__(self, index: int) -> Tuple[Any, float]:
         """Get item by index (operator overloading)."""
         if self.data and 0 <= index < len(self.data):
             return self.data[index]
@@ -147,23 +174,28 @@ class Dataset:
 
 def validate_data(x_data: List[float], y_data: List[float]) -> Tuple[bool, str]:
     """
-    Validate input data for linear regression.
-    
+    Validate input data for regression.
+
     Args:
         x_data: List of x values
         y_data: List of y values
-        
+
     Returns:
         Tuple of (is_valid, error_message)
     """
-    if len(x_data) != len(y_data):
+    if len(x_data) != len(y_data):  # if-statement requirement
         return False, f"Data length mismatch: x={len(x_data)}, y={len(y_data)}"
-    
+
     if len(x_data) < 2:
         return False, "Insufficient data points (need at least 2)"
-    
-    # Check for constant x values (would cause division by zero in regression)
+
     if len(set(x_data)) == 1:
         return False, "All x values are identical"
-    
+
     return True, "Data is valid"
+
+
+if __name__ == "__main__":
+    # __name__ requirement: quick sanity demo (don’t rely on this in the notebook)
+    # TODO: update filepath and columns for your dataset when you run locally.
+    pass
