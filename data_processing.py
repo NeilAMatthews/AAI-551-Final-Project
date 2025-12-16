@@ -6,21 +6,34 @@ Supports generic (x, y) datasets and time-series datasets (e.g., AEP_hourly).
 
 from __future__ import annotations
 
-import statistics
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple, List, Optional, Generator, Dict, Any
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+
+class DataLoadingError(RuntimeError):
+    """Raised when a dataset cannot be loaded or validated."""
+
+
+@dataclass(frozen=True)
+class DatasetSpec:
+    """Immutable dataset configuration (nice for README + reproducibility)."""
+    filepath: str
+    x_col: str
+    y_col: str
+    parse_datetime: bool = False
+    drop_na: bool = True
 
 
 class Dataset:
     """
     Class representing a dataset for analysis.
 
-    This class handles data loading, validation, and basic statistics.
+    Handles data loading, validation, and basic statistics.
     """
 
     def __init__(
@@ -31,16 +44,6 @@ class Dataset:
         parse_datetime: bool = False,
         drop_na: bool = True,
     ):
-        """
-        Initialize Dataset with data from a CSV file.
-
-        Args:
-            filepath: Path to the CSV file containing data
-            x_col: Column name for x (feature) values
-            y_col: Column name for y (target) values
-            parse_datetime: If True, parse x_col as datetime
-            drop_na: If True, drop rows with missing x/y after conversion
-        """
         self.filepath = str(filepath)
         self.x_col = x_col
         self.y_col = y_col
@@ -59,9 +62,35 @@ class Dataset:
 
         self._load_data()
 
+    @classmethod
+    def from_spec(cls, spec: DatasetSpec) -> "Dataset":
+        """
+        Alternate constructor demonstrating exception handling approach #1.
+        """
+        try:
+            return cls(
+                filepath=spec.filepath,
+                x_col=spec.x_col,
+                y_col=spec.y_col,
+                parse_datetime=spec.parse_datetime,
+                drop_na=spec.drop_na,
+            )
+        except (FileNotFoundError, pd.errors.ParserError, ValueError, TypeError) as e:
+            raise DataLoadingError(f"Failed to create Dataset from spec: {spec}") from e
+
     def _load_data(self) -> None:
-        """Load data from CSV file with error handling (raises exceptions)."""
-        df = pd.read_csv(self.filepath)
+        """
+        Load data from CSV file.
+
+        Exception handling approach #2: catch + re-raise as a domain error
+        to make debugging clearer in notebooks/tests.
+        """
+        try:
+            df = pd.read_csv(self.filepath)
+        except FileNotFoundError as e:
+            raise DataLoadingError(f"File not found: {self.filepath}") from e
+        except pd.errors.ParserError as e:
+            raise DataLoadingError(f"CSV parse error in: {self.filepath}") from e
 
         # Check required columns
         if self.x_col not in df.columns or self.y_col not in df.columns:
@@ -73,24 +102,23 @@ class Dataset:
         x_series = df[self.x_col]
         y_series = df[self.y_col]
 
-        # Parse datetime if requested
         if self.parse_datetime:
+            # errors="raise" ensures bad timestamps fail fast and loudly
             x_series = pd.to_datetime(x_series, errors="raise")
 
         # Ensure y is numeric
         y_series = pd.to_numeric(y_series, errors="raise")
 
-        # Optional NA handling
         if self.drop_na:
             mask = ~(x_series.isna() | y_series.isna())
             x_series = x_series[mask]
             y_series = y_series[mask]
 
-        # Convert to lists (list comprehension requirement)
+        # list comprehension requirement
         self.x_data = [x for x in x_series.tolist()]
         self.y_data = [float(y) for y in y_series.tolist()]
 
-        # Store as list of tuples (zip requirement)
+        # zip requirement
         self.data = list(zip(self.x_data, self.y_data))
 
         self._calculate_metadata()
@@ -101,13 +129,11 @@ class Dataset:
             self.metadata = {}
             return
 
-        # Use map + lambda (rubric feature)
-        y_squared = list(map(lambda v: v ** 2, self.y_data))
+        # map + lambda requirement
+        y_squared = list(map(lambda v: v**2, self.y_data))
 
-        # Use numpy meaningfully (not superfluous)
         y_np = np.array(self.y_data, dtype=float)
 
-        # For numeric x only; datetime x is handled separately
         numeric_x = all(isinstance(x, (int, float, np.number)) for x in self.x_data)
 
         self.metadata = {
@@ -116,57 +142,47 @@ class Dataset:
             "y_std": float(np.std(y_np, ddof=1)) if len(y_np) > 1 else 0.0,
             "y_min": float(np.min(y_np)),
             "y_max": float(np.max(y_np)),
-            "y_energy": float(np.sum(y_squared)),  # uses map/lambda output
+            "y_energy": float(np.sum(y_squared)),
             "created_at": self.created_at.isoformat(),
         }
 
         if numeric_x:
+            x_vals = [float(x) for x in self.x_data]
             self.metadata.update(
                 {
-                    "x_mean": statistics.mean([float(x) for x in self.x_data]),
-                    "x_variance": statistics.variance([float(x) for x in self.x_data])
-                    if len(self.x_data) > 1
-                    else 0.0,
-                    "x_range": (min(self.x_data), max(self.x_data)),
+                    "x_mean": float(np.mean(x_vals)),
+                    "x_variance": float(np.var(x_vals, ddof=1)) if len(x_vals) > 1 else 0.0,
+                    "x_range": (min(x_vals), max(x_vals)),
                 }
             )
 
     def get_data_generator(self) -> Generator[Tuple[Any, float], None, None]:
-        """
-        Generator function to yield data points one by one.
-
-        Yields:
-            Tuple of (x, y) values
-        """
+        """Generator function to yield data points one by one."""
         if not self.data:
             return
         for x, y in self.data:  # for-loop requirement
             yield x, y
 
     def filter_data(self, condition_func) -> List[Tuple[Any, float]]:
-        """
-        Filter data using a condition function.
-
-        Args:
-            condition_func: Function that takes (x, y) and returns bool
-
-        Returns:
-            Filtered list of (x, y) tuples
-        """
+        """Filter data using a condition function."""
         if not self.data:
             return []
         return list(filter(condition_func, self.data))  # filter requirement
 
+    def to_dataframe(self) -> pd.DataFrame:
+        """Convenience for models/plots."""
+        return pd.DataFrame({self.x_col: self.x_data, self.y_col: self.y_data})
+
     def __str__(self) -> str:
-        """String representation of the dataset."""
+        """String representation (rubric)."""
         return f"Dataset({Path(self.filepath).name}): {len(self)} samples"
 
     def __len__(self) -> int:
-        """Return number of samples (operator overloading)."""
+        """Operator overloading."""
         return len(self.data) if self.data else 0
 
     def __getitem__(self, index: int) -> Tuple[Any, float]:
-        """Get item by index (operator overloading)."""
+        """Operator overloading."""
         if self.data and 0 <= index < len(self.data):
             return self.data[index]
         raise IndexError("Index out of range")
@@ -174,14 +190,9 @@ class Dataset:
 
 def validate_data(x_data: List[float], y_data: List[float]) -> Tuple[bool, str]:
     """
-    Validate input data for regression.
+    Validate input data.
 
-    Args:
-        x_data: List of x values
-        y_data: List of y values
-
-    Returns:
-        Tuple of (is_valid, error_message)
+    Returns (is_valid, message).
     """
     if len(x_data) != len(y_data):  # if-statement requirement
         return False, f"Data length mismatch: x={len(x_data)}, y={len(y_data)}"
@@ -196,6 +207,5 @@ def validate_data(x_data: List[float], y_data: List[float]) -> Tuple[bool, str]:
 
 
 if __name__ == "__main__":
-    # __name__ requirement: quick sanity demo (don’t rely on this in the notebook)
-    # TODO: update filepath and columns for your dataset when you run locally.
+    # __name__ requirement: quick sanity demo
     pass
