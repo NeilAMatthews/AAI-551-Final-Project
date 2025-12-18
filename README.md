@@ -3,7 +3,7 @@
 ## Link to the original dataset
 https://www.kaggle.com/datasets/robikscube/hourly-energy-consumption?select=AEP_hourly.csv
 
-## Students(hover to see what they did)
+## Students and Contributions: 
 - Christopher Kaldas: implemented src processing files
 - Neil Mathews: implemented MAIN and also implemented src files. Researched real life implementations that we are applying this project for.
 
