@@ -3,9 +3,9 @@
 ## Link to the original dataset
 https://www.kaggle.com/datasets/robikscube/hourly-energy-consumption?select=AEP_hourly.csv
 
-## Students
-- Christopher Kaldas
-- Neil Mathews
+## Students(hover to see what they did)
+- Christopher Kaldas: <implemented src processing files>
+- Neil Mathews: <implemented MAIN and also implemented src files. Researched real life implementations that we are applying this project for.>
 
 ## Problem
 We analyze and forecast hourly electricity demand (MW) using the AEP hourly dataset. Accurate demand forecasting helps utilities plan generation, reduce cost, and improve grid reliability.
@@ -52,7 +52,3 @@ Columns used:
 6. Run the tests from the project root:
    - `pytest -q`
 
-
-## Team Contributions
-- Christopher Kaldas: <implemented src processing files>
-- Neil Mathews: <implemented MAIN and also implemented src files. Researched real life implementations that we are applying this project for.>
