@@ -26,7 +26,7 @@ Columns used:
 - `src/timeseries.py` : `TimeSeriesDataset` (inherits from `Dataset`) + time-series feature engineering
 - `src/models.py` : forecasting approaches (baselines + feature-based model)
 - `src/metrics.py` : evaluation metrics (ex: MAE/RMSE/MAPE)
-- `src/__pycache__/` : auto-generated Python cache files (not required for submission)
+- `src/__pycache__/` : Python cache files
 
 ## Requirements
 - Python 3.12 or 3.13
