@@ -43,15 +43,13 @@ Columns used:
 3. Open the Jupyter Notebook:
    - `main.ipynb`
 4. Run the notebook cells from top to bottom.
-5. When you reach the “Data Loading and Exploration” section, verify this line is set correctly:
-   - `DATA_PATH = "data/AEP_hourly.csv"`
-6. Review the notebook outputs:
+5. Review the notebook outputs:
    - dataset metadata
    - validation results
    - plots/EDA
    - train/test split results
    - model evaluation metrics
-7. Run the tests from the project root:
+6. Run the tests from the project root:
    - `pytest -q`
 
 
