@@ -36,54 +36,24 @@ Columns used:
   - matplotlib
   - pytest (for unit tests)
 
-## How to Run
-1. **Install dependencies**
-   - Option A (recommended if you have `requirements.txt`):
-     - `pip install -r requirements.txt`
-   - Option B (manual install):
-     - `pip install numpy pandas matplotlib pytest`
+## Instructions
+1. Clone/open the repository on your machine.
+2. Confirm the dataset file exists at:
+   - `data/AEP_hourly.csv`
+3. Open the Jupyter Notebook:
+   - `main.ipynb`
+4. Run the notebook cells from top to bottom.
+5. When you reach the “Data Loading and Exploration” section, verify this line is set correctly:
+   - `DATA_PATH = "data/AEP_hourly.csv"`
+6. Review the notebook outputs:
+   - dataset metadata
+   - validation results
+   - plots/EDA
+   - train/test split results
+   - model evaluation metrics
+7. Run the tests from the project root:
+   - `pytest -q`
 
-2. **Verify dataset path**
-   - Confirm the file exists here:
-     - `data/AEP_hourly.csv`
-
-3. **Run the notebook**
-   - Open and run all cells in:
-     - `main.ipynb`
-
-## How to Use
-1. **Open the notebook**
-   - Launch Jupyter and open: `main.ipynb`
-
-2. **Load the dataset**
-   - The notebook should load the CSV from:
-     - `data/AEP_hourly.csv`
-   - Example usage inside the notebook:
-     - `ds = TimeSeriesDataset("data/AEP_hourly.csv")`
-
-3. **Explore the data**
-   - Run the EDA/plotting cells to visualize the time series.
-   - Optional: slice a date range for focused analysis (if included in your code):
-     - `ds_slice = ds.slice_range("2016-01-01", "2017-01-01")`
-
-4. **Train models**
-   - Run the model cells in the notebook in order (baselines → improved model).
-   - One of the approaches includes a **while-loop** tuning step (if you kept the tuner).
-
-5. **Evaluate results**
-   - The notebook computes evaluation metrics (ex: MAE/RMSE/MAPE).
-   - Compare metrics across approaches to determine the best-performing method.
-
-## How to Test (Pytest)
-If your repo includes tests (recommended for the rubric), run from the project root:
-- `pytest -q`
-
-> If you do not currently have a `tests/` folder, add one (ex: `tests/test_models.py`, `tests/test_timeseries.py`) so the graders can verify your testing requirement.
-
-## Notes for Submission (recommended cleanup)
-- Do not commit `src/__pycache__/` files (add them to `.gitignore`):
-  - `__pycache__/`
-  - `*.pyc`
 
 ## Team Contributions
 - Christopher Kaldas: <implemented src processing files>
